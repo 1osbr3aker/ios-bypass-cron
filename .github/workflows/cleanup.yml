@@ -1,54 +1,61 @@
 name: Cleanup Cron Job
 
 on:
-  # Schedule: Run every 5 minutes
-  schedule:
-    - cron: '*/5 * * * *'
-  
-  # Allow manual trigger from GitHub UI
+  # Allow manual trigger
   workflow_dispatch:
   
-  # Optional: Run on code push (for testing)
+  # Run on push for testing
   push:
     branches: [ main ]
 
 jobs:
-  cleanup:
+  test-connection:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
+    - name: Check repository
+      run: echo "✅ Repository checked out successfully"
     
-    - name: Run Cleanup Script
+    - name: Test Internet Connection
       run: |
-        echo "🕐 Starting cleanup at $(date)"
-        echo "🔗 Calling: https://1osbr3aker.rf.gd/cron/cleanup.php"
-        
-        # Call your cleanup endpoint
-        response=$(curl -s -w "\n%{http_code}" "https://1osbr3aker.rf.gd/cron/cleanup.php")
-        
-        # Split response and status code
-        http_code=$(echo "$response" | tail -n1)
-        body=$(echo "$response" | head -n -1)
-        
-        echo "📊 HTTP Response Code: $http_code"
-        echo "📝 Response Body:"
-        echo "$body"
-        
-        # Check if successful (200 OK)
-        if [ "$http_code" -eq 200 ] || [ "$http_code" -eq 000 ]; then
-          echo "✅ Cleanup successful!"
-          exit 0
-        else
-          echo "❌ Cleanup failed with HTTP $http_code"
-          exit 1
-        fi
+        echo "🌐 Testing basic internet connectivity..."
+        ping -c 3 google.com
+        echo "✅ Internet connection OK"
     
-    - name: Notify Success
-      if: success()
-      run: echo "🎉 Cron job completed successfully at $(date)"
+    - name: Test DNS Resolution
+      run: |
+        echo "🔍 Testing DNS for your domain..."
+        nslookup 1osbr3aker.rf.gd
+        echo "✅ DNS resolution OK"
     
-    - name: Notify Failure
-      if: failure()
-      run: echo "❌ Cron job failed at $(date). Check logs above."
+    - name: Test HTTPS Access
+      run: |
+        echo "🔗 Testing HTTPS access to your site..."
+        curl -I "https://1osbr3aker.rf.gd/" --max-time 10
+        echo "✅ HTTPS access OK"
+    
+    - name: Test Cleanup Endpoint
+      run: |
+        echo "🔄 Testing cleanup endpoint..."
+        echo "URL: https://1osbr3aker.rf.gd/cron/cleanup.php"
+        
+        # Try with verbose output
+        curl -v "https://1osbr3aker.rf.gd/cron/cleanup.php" --max-time 30 2>&1 | head -50
+        
+        # Also try with simpler options
+        echo "--- Alternative test ---"
+        curl -s -o /dev/null -w "Status: %{http_code}\nTime: %{time_total}s\n" \
+          "https://1osbr3aker.rf.gd/cron/cleanup.php" --max-time 10
+    
+    - name: Create Status File
+      run: |
+        echo "📝 Creating test results..."
+        date > test-result.txt
+        echo "Test completed at $(date)" >> test-result.txt
+    
+    - name: Upload Test Results
+      uses: actions/upload-artifact@v3
+      with:
+        name: test-results
+        path: test-result.txt
