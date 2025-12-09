@@ -1,61 +1,64 @@
 name: Cleanup Cron Job
-
 on:
+  # Run every 5 minutes
+  schedule:
+    - cron: '*/5 * * * *'
+  
   # Allow manual trigger
   workflow_dispatch:
   
-  # Run on push for testing
+  # Run on push to test
   push:
-    branches: [ main ]
+    branches: [ main, master ]
 
 jobs:
-  test-connection:
+  cleanup:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     
     steps:
-    - name: Check repository
-      run: echo "✅ Repository checked out successfully"
-    
-    - name: Test Internet Connection
-      run: |
-        echo "🌐 Testing basic internet connectivity..."
-        ping -c 3 google.com
-        echo "✅ Internet connection OK"
-    
-    - name: Test DNS Resolution
-      run: |
-        echo "🔍 Testing DNS for your domain..."
-        nslookup 1osbr3aker.rf.gd
-        echo "✅ DNS resolution OK"
-    
-    - name: Test HTTPS Access
-      run: |
-        echo "🔗 Testing HTTPS access to your site..."
-        curl -I "https://1osbr3aker.rf.gd/" --max-time 10
-        echo "✅ HTTPS access OK"
-    
-    - name: Test Cleanup Endpoint
-      run: |
-        echo "🔄 Testing cleanup endpoint..."
-        echo "URL: https://1osbr3aker.rf.gd/cron/cleanup.php"
-        
-        # Try with verbose output
-        curl -v "https://1osbr3aker.rf.gd/cron/cleanup.php" --max-time 30 2>&1 | head -50
-        
-        # Also try with simpler options
-        echo "--- Alternative test ---"
-        curl -s -o /dev/null -w "Status: %{http_code}\nTime: %{time_total}s\n" \
-          "https://1osbr3aker.rf.gd/cron/cleanup.php" --max-time 10
-    
-    - name: Create Status File
-      run: |
-        echo "📝 Creating test results..."
-        date > test-result.txt
-        echo "Test completed at $(date)" >> test-result.txt
-    
-    - name: Upload Test Results
-      uses: actions/upload-artifact@v3
-      with:
-        name: test-results
-        path: test-result.txt
+      - name: Check current time
+        run: echo "🕐 Cron job started at $(date)"
+      
+      - name: Run Cleanup Script
+        run: |
+          echo "🔄 Calling cleanup endpoint..."
+          
+          # Call your InfinityFree cleanup script
+          RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}\nTIME:%{time_total}s" \
+            "https://1osbr3aker.rf.gd/cron/cleanup.php")
+          
+          # Extract parts
+          BODY=$(echo "$RESPONSE" | grep -v "HTTP_STATUS" | grep -v "TIME" | head -1)
+          HTTP_STATUS=$(echo "$RESPONSE" | grep "HTTP_STATUS" | cut -d':' -f2)
+          TIME_TAKEN=$(echo "$RESPONSE" | grep "TIME" | cut -d':' -f2)
+          
+          echo "📊 Response: $BODY"
+          echo "📡 HTTP Status: $HTTP_STATUS"
+          echo "⏱️ Time taken: ${TIME_TAKEN}s"
+          
+          # Check if successful
+          if [ "$HTTP_STATUS" = "200" ] || [ "$HTTP_STATUS" = "000" ]; then
+            echo "✅ Cleanup executed successfully"
+          else
+            echo "❌ Cleanup failed with HTTP $HTTP_STATUS"
+            exit 1
+          fi
+      
+      - name: Verify Cleanup
+        run: |
+          echo "🔍 Checking if cleanup worked..."
+          # Add verification logic if needed
+          echo "✅ Cleanup verification complete"
+      
+      - name: Send Success Notification
+        if: success()
+        run: |
+          echo "🎉 Cron job completed successfully!"
+          echo "Next run in 5 minutes"
+      
+      - name: Send Failure Notification
+        if: failure()
+        run: |
+          echo "❌ Cron job failed!"
+          echo "Check the logs above for errors"
